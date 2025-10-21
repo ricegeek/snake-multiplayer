@@ -368,6 +368,32 @@
             font-weight: bold;
         }
         
+        /* Countdown timer */
+        .countdown-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            font-size: 10rem;
+            color: #ff4a4a;
+            text-shadow: 0 0 20px rgba(255, 74, 74, 0.8);
+            font-weight: bold;
+            letter-spacing: 5px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        
+        .countdown-overlay.active {
+            opacity: 1;
+        }
+        
         /* Mobile-specific adjustments */
         @media (max-width: 500px) {
             h1 { font-size: 2rem; }
@@ -380,6 +406,9 @@
                 width: 60px; 
                 height: 60px; 
                 font-size: 1.5rem; 
+            }
+            .countdown-overlay {
+                font-size: 8rem;
             }
         }
         
@@ -491,6 +520,7 @@
             <div class="game-container">
                 <canvas id="game-canvas"></canvas>
                 <div class="retro-scanlines"></div>
+                <div class="countdown-overlay" id="countdown-overlay">3</div>
             </div>
             
             <div class="turn-indicator" id="turn-indicator">Waiting for game to start...</div>
@@ -537,7 +567,8 @@
             currentTurn: 1,
             players: {},
             playerOrder: [],
-            myAssignedDirections: []
+            myAssignedDirections: [],
+            countdownActive: false
         };
         
         // DOM Elements
@@ -566,6 +597,7 @@
         const gameControlsPortrait = document.getElementById('game-controls-portrait');
         const gameControlsLandscape = document.getElementById('game-controls-landscape');
         const turnIndicator = document.getElementById('turn-indicator');
+        const countdownOverlay = document.getElementById('countdown-overlay');
         
         // Check if device is in landscape mode
         function isLandscape() {
@@ -599,6 +631,7 @@
             gameState.players = {};
             gameState.playerOrder = [];
             gameState.myAssignedDirections = [];
+            gameState.countdownActive = false;
             
             // Reset UI
             controlCards.forEach(card => {
@@ -617,6 +650,8 @@
             gameControlsPortrait.innerHTML = '';
             gameControlsLandscape.innerHTML = '';
             turnIndicator.textContent = 'Waiting for game to start...';
+            countdownOverlay.textContent = '3';
+            countdownOverlay.classList.remove('active');
         }
         
         // Show screen
@@ -628,8 +663,29 @@
             if (screenName === 'game') {
                 setupCanvas();
                 setupGameControls();
-                startGame();
+                // Don't start game immediately - show countdown first
+                showCountdown();
             }
+        }
+        
+        // Show 3-second countdown
+        function showCountdown() {
+            gameState.countdownActive = true;
+            let count = 3;
+            countdownOverlay.textContent = count;
+            countdownOverlay.classList.add('active');
+            
+            const countdownInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownOverlay.textContent = count;
+                } else {
+                    clearInterval(countdownInterval);
+                    countdownOverlay.classList.remove('active');
+                    gameState.countdownActive = false;
+                    startGame();
+                }
+            }, 1000);
         }
         
         // Assign direction to current player
@@ -748,6 +804,9 @@
         
         // Handle direction input
         function handleDirectionInput(direction) {
+            // Don't allow input during countdown
+            if (gameState.countdownActive) return;
+            
             // Only allow input during player's turn
             if (gameState.currentTurn !== gameState.playerId) {
                 return;
@@ -1096,6 +1155,7 @@
         // Keyboard controls for desktop
         document.addEventListener('keydown', (e) => {
             if (gameState.screen !== 'game') return;
+            if (gameState.countdownActive) return;
             
             let direction;
             if (e.key === 'ArrowUp') direction = 'up';
