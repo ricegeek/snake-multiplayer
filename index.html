@@ -275,16 +275,22 @@
             background: rgba(255, 255, 74, 0.2);
         }
         
-        /* Game controls */
-        .game-controls {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
+        /* Game controls container */
+        .game-controls-container {
+            position: relative;
+            width: 100%;
             margin-top: 15px;
-            flex-wrap: wrap;
         }
         
-        .direction-btn {
+        /* Portrait mode controls (default) */
+        .game-controls-portrait {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        
+        .direction-btn-portrait {
             width: 70px;
             height: 70px;
             border-radius: 50%;
@@ -300,27 +306,60 @@
             box-shadow: 0 4px 0 rgba(74, 74, 255, 0.3);
         }
         
-        .direction-btn:active {
+        .direction-btn-portrait:active {
             transform: scale(0.95);
             box-shadow: 0 2px 0 rgba(74, 74, 255, 0.3);
         }
         
-        .direction-btn.up { transform: rotate(0deg); }
-        .direction-btn.down { transform: rotate(180deg); }
-        .direction-btn.left { transform: rotate(270deg); }
-        .direction-btn.right { transform: rotate(90deg); }
-        
-        .direction-btn.up:active { transform: rotate(0deg) scale(0.95); }
-        .direction-btn.down:active { transform: rotate(180deg) scale(0.95); }
-        .direction-btn.left:active { transform: rotate(270deg) scale(0.95); }
-        .direction-btn.right:active { transform: rotate(90deg) scale(0.95); }
-        
-        .direction-btn.disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-            box-shadow: none;
+        /* Landscape mode controls */
+        .game-controls-landscape {
+            position: absolute;
+            right: -100px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 80px;
         }
         
+        .direction-btn-landscape {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 2px solid #4a4aff;
+            background: rgba(30, 30, 60, 0.8);
+            color: white;
+            font-size: 1.8rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0 rgba(74, 74, 255, 0.3);
+        }
+        
+        .direction-btn-landscape:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 0 rgba(74, 74, 255, 0.3);
+        }
+        
+        .direction-btn-landscape.up { transform: rotate(0deg); }
+        .direction-btn-landscape.down { transform: rotate(180deg); }
+        .direction-btn-landscape.left { transform: rotate(270deg); }
+        .direction-btn-landscape.right { transform: rotate(90deg); }
+        
+        .direction-btn-landscape.up:active { transform: rotate(0deg) scale(0.95); }
+        .direction-btn-landscape.down:active { transform: rotate(180deg) scale(0.95); }
+        .direction-btn-landscape.left:active { transform: rotate(270deg) scale(0.95); }
+        .direction-btn-landscape.right:active { transform: rotate(90deg) scale(0.95); }
+        
+        /* Hide landscape controls by default */
+        .game-controls-landscape {
+            display: none;
+        }
+        
+        /* Turn indicator */
         .turn-indicator {
             margin: 10px 0;
             padding: 10px;
@@ -337,12 +376,39 @@
             .control-icon { font-size: 1.8rem; }
             .btn { padding: 12px; font-size: 1rem; }
             .player-indicator { padding: 8px; font-size: 0.95rem; }
-            .direction-btn { width: 60px; height: 60px; font-size: 1.5rem; }
+            .direction-btn-portrait, .direction-btn-landscape { 
+                width: 60px; 
+                height: 60px; 
+                font-size: 1.5rem; 
+            }
+        }
+        
+        /* Landscape orientation */
+        @media (orientation: landscape) and (max-height: 500px) {
+            .game-controls-portrait {
+                display: none !important;
+            }
+            
+            .game-controls-landscape {
+                display: flex !important;
+            }
+            
+            .game-container {
+                max-width: 300px;
+                aspect-ratio: 4/3;
+            }
+        }
+        
+        /* Desktop/laptop detection */
+        @media (min-width: 768px) and (min-height: 600px) {
+            .game-controls-portrait, .game-controls-landscape {
+                /* Show both but position appropriately */
+            }
         }
         
         /* iOS-specific fixes */
         @supports (-webkit-touch-callout: none) {
-            .btn, .direction-btn {
+            .btn, .direction-btn-portrait, .direction-btn-landscape {
                 -webkit-appearance: none;
             }
         }
@@ -429,8 +495,16 @@
             
             <div class="turn-indicator" id="turn-indicator">Waiting for game to start...</div>
             
-            <div class="game-controls" id="game-controls">
-                <!-- Direction buttons will be added here dynamically -->
+            <div class="game-controls-container">
+                <!-- Portrait controls (bottom of screen) -->
+                <div class="game-controls-portrait" id="game-controls-portrait">
+                    <!-- Buttons will be added here dynamically -->
+                </div>
+                
+                <!-- Landscape controls (right side of screen) -->
+                <div class="game-controls-landscape" id="game-controls-landscape">
+                    <!-- Buttons will be added here dynamically -->
+                </div>
             </div>
             
             <div class="status-bar">
@@ -489,8 +563,14 @@
         const statusMessage = document.getElementById('status-message');
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
-        const gameControls = document.getElementById('game-controls');
+        const gameControlsPortrait = document.getElementById('game-controls-portrait');
+        const gameControlsLandscape = document.getElementById('game-controls-landscape');
         const turnIndicator = document.getElementById('turn-indicator');
+        
+        // Check if device is in landscape mode
+        function isLandscape() {
+            return window.matchMedia("(orientation: landscape)").matches && window.innerHeight < 500;
+        }
         
         // Generate a unique game ID
         function generateGameId() {
@@ -534,7 +614,8 @@
             playerCountElement.textContent = '0';
             statusMessage.textContent = '';
             statusMessage.className = 'status-message';
-            gameControls.innerHTML = '';
+            gameControlsPortrait.innerHTML = '';
+            gameControlsLandscape.innerHTML = '';
             turnIndicator.textContent = 'Waiting for game to start...';
         }
         
@@ -621,9 +702,21 @@
             ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
         }
         
-        // Set up game controls based on assigned directions
+        // Create a direction button
+        function createDirectionButton(direction, isLandscape = false) {
+            const btn = document.createElement('div');
+            const className = isLandscape ? 'direction-btn-landscape' : 'direction-btn-portrait';
+            btn.className = `${className} ${direction}`;
+            btn.innerHTML = '↑';
+            btn.dataset.direction = direction;
+            btn.addEventListener('click', () => handleDirectionInput(direction));
+            return btn;
+        }
+        
+        // Set up game controls based on assigned directions and orientation
         function setupGameControls() {
-            gameControls.innerHTML = '';
+            gameControlsPortrait.innerHTML = '';
+            gameControlsLandscape.innerHTML = '';
             
             // Determine which directions this player controls
             gameState.myAssignedDirections = [];
@@ -637,17 +730,19 @@
             const directions = ['up', 'down', 'left', 'right'];
             directions.forEach(dir => {
                 if (gameState.myAssignedDirections.includes(dir)) {
-                    const btn = document.createElement('div');
-                    btn.className = `direction-btn ${dir}`;
-                    btn.innerHTML = '↑';
-                    btn.dataset.direction = dir;
-                    btn.addEventListener('click', () => handleDirectionInput(dir));
-                    gameControls.appendChild(btn);
+                    // Portrait mode buttons (bottom of screen)
+                    const portraitBtn = createDirectionButton(dir, false);
+                    gameControlsPortrait.appendChild(portraitBtn);
+                    
+                    // Landscape mode buttons (right side)
+                    const landscapeBtn = createDirectionButton(dir, true);
+                    gameControlsLandscape.appendChild(landscapeBtn);
                 }
             });
             
             if (gameState.myAssignedDirections.length === 0) {
-                gameControls.innerHTML = '<div style="color: #ff4a4a; padding: 10px;">You are not controlling any directions!</div>';
+                gameControlsPortrait.innerHTML = '<div style="color: #ff4a4a; padding: 10px;">You are not controlling any directions!</div>';
+                gameControlsLandscape.innerHTML = '<div style="color: #ff4a4a; padding: 10px; width: 100%;">No controls</div>';
             }
         }
         
@@ -684,7 +779,7 @@
         // Update turn indicator
         function updateTurnIndicator() {
             if (gameState.currentTurn === gameState.playerId) {
-                turnIndicator.textContent = 'Your turn! Tap a direction button.';
+                turnIndicator.textContent = 'Your turn! Use direction buttons or keyboard arrows.';
                 turnIndicator.style.background = 'rgba(74, 255, 74, 0.3)';
             } else {
                 turnIndicator.textContent = 'Waiting for other players...';
@@ -798,12 +893,22 @@
             }
         });
         
-        // Handle window resize
+        // Handle window resize and orientation change
         window.addEventListener('resize', () => {
             if (gameState.screen === 'game') {
                 setupCanvas();
                 drawGame();
             }
+        });
+        
+        // Handle orientation change
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                if (gameState.screen === 'game') {
+                    setupCanvas();
+                    drawGame();
+                }
+            }, 100);
         });
         
         // Game functions
@@ -987,6 +1092,23 @@
                 }
             }, 100);
         }
+        
+        // Keyboard controls for desktop
+        document.addEventListener('keydown', (e) => {
+            if (gameState.screen !== 'game') return;
+            
+            let direction;
+            if (e.key === 'ArrowUp') direction = 'up';
+            else if (e.key === 'ArrowDown') direction = 'down';
+            else if (e.key === 'ArrowLeft') direction = 'left';
+            else if (e.key === 'ArrowRight') direction = 'right';
+            else return;
+            
+            // Check if this player controls this direction
+            if (!gameState.myAssignedDirections.includes(direction)) return;
+            
+            handleDirectionInput(direction);
+        });
     </script>
 </body>
 </html>
