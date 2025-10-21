@@ -275,6 +275,60 @@
             background: rgba(255, 255, 74, 0.2);
         }
         
+        /* Game controls */
+        .game-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .direction-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 2px solid #4a4aff;
+            background: rgba(30, 30, 60, 0.8);
+            color: white;
+            font-size: 1.8rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0 rgba(74, 74, 255, 0.3);
+        }
+        
+        .direction-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 0 rgba(74, 74, 255, 0.3);
+        }
+        
+        .direction-btn.up { transform: rotate(0deg); }
+        .direction-btn.down { transform: rotate(180deg); }
+        .direction-btn.left { transform: rotate(270deg); }
+        .direction-btn.right { transform: rotate(90deg); }
+        
+        .direction-btn.up:active { transform: rotate(0deg) scale(0.95); }
+        .direction-btn.down:active { transform: rotate(180deg) scale(0.95); }
+        .direction-btn.left:active { transform: rotate(270deg) scale(0.95); }
+        .direction-btn.right:active { transform: rotate(90deg) scale(0.95); }
+        
+        .direction-btn.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .turn-indicator {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 74, 0.2);
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        
         /* Mobile-specific adjustments */
         @media (max-width: 500px) {
             h1 { font-size: 2rem; }
@@ -283,21 +337,13 @@
             .control-icon { font-size: 1.8rem; }
             .btn { padding: 12px; font-size: 1rem; }
             .player-indicator { padding: 8px; font-size: 0.95rem; }
+            .direction-btn { width: 60px; height: 60px; font-size: 1.5rem; }
         }
         
         /* iOS-specific fixes */
         @supports (-webkit-touch-callout: none) {
-            .btn {
+            .btn, .direction-btn {
                 -webkit-appearance: none;
-            }
-        }
-        
-        /* Android-specific fixes */
-        @media screen and (min-width: 0) {
-            input[type="text"] {
-                -webkit-appearance: none;
-                -moz-appearance: none;
-                appearance: none;
             }
         }
         
@@ -318,10 +364,10 @@
                 <h3>How to Play</h3>
                 <ul>
                     <li>Create a game and share the link with friends</li>
-                    <li>Each player controls one or more directions</li>
-                    <li>Work together to collect apples</li>
-                    <li>All 4 directions must be assigned to start</li>
-                    <li>Play solo by assigning all directions to yourself!</li>
+                    <li>Each player assigns directions they control</li>
+                    <li>Take turns controlling the snake in sequence</li>
+                    <li>Collect apples without hitting walls or yourself</li>
+                    <li>All players see the same game state!</li>
                 </ul>
             </div>
             
@@ -340,7 +386,7 @@
             
             <div id="status-message" class="status-message"></div>
             
-            <p>Assign directions to yourself</p>
+            <p>Assign directions you want to control</p>
             
             <div class="controls">
                 <div class="control-card" data-direction="up">
@@ -381,6 +427,12 @@
                 <div class="retro-scanlines"></div>
             </div>
             
+            <div class="turn-indicator" id="turn-indicator">Waiting for game to start...</div>
+            
+            <div class="game-controls" id="game-controls">
+                <!-- Direction buttons will be added here dynamically -->
+            </div>
+            
             <div class="status-bar">
                 <div>Apples: <span id="score">0</span></div>
                 <div>Players: <span id="player-count">0</span>/4</div>
@@ -391,12 +443,13 @@
     </div>
 
     <script>
-        // Mobile-friendly game state
+        // Game state with multiplayer support
         const gameState = {
             screen: 'home',
             gameId: null,
             isOwner: false,
-            playerId: 1,
+            playerId: null,
+            playerName: null,
             selectedDirections: {},
             score: 0,
             gameRunning: false,
@@ -405,8 +458,12 @@
             direction: 'right',
             lastDirection: 'right',
             gridSize: 20,
-            gameSpeed: 150, // Slightly slower for mobile
-            canvasSize: { width: 400, height: 266 } // 3:2 aspect ratio
+            gameSpeed: 200, // Slower for turn-based gameplay
+            canvasSize: { width: 400, height: 266 },
+            currentTurn: 1,
+            players: {},
+            playerOrder: [],
+            myAssignedDirections: []
         };
         
         // DOM Elements
@@ -432,20 +489,8 @@
         const statusMessage = document.getElementById('status-message');
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
-        
-        // Set canvas size based on container
-        function setupCanvas() {
-            const container = canvas.parentElement;
-            const displayWidth = container.clientWidth;
-            const displayHeight = container.clientHeight;
-            
-            // Set actual canvas size (higher resolution)
-            canvas.width = displayWidth * window.devicePixelRatio;
-            canvas.height = displayHeight * window.devicePixelRatio;
-            
-            // Scale context to match display size
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-        }
+        const gameControls = document.getElementById('game-controls');
+        const turnIndicator = document.getElementById('turn-indicator');
         
         // Generate a unique game ID
         function generateGameId() {
@@ -463,12 +508,17 @@
         // Initialize game
         function initGame(isOwner = false) {
             gameState.isOwner = isOwner;
-            gameState.playerId = 1;
+            gameState.playerId = Date.now(); // Unique ID for each player
+            gameState.playerName = `Player ${Math.floor(Math.random() * 1000) + 1}`;
             gameState.selectedDirections = {};
             gameState.score = 0;
             gameState.gameRunning = false;
             gameState.direction = 'right';
             gameState.lastDirection = 'right';
+            gameState.currentTurn = 1;
+            gameState.players = {};
+            gameState.playerOrder = [];
+            gameState.myAssignedDirections = [];
             
             // Reset UI
             controlCards.forEach(card => {
@@ -484,6 +534,8 @@
             playerCountElement.textContent = '0';
             statusMessage.textContent = '';
             statusMessage.className = 'status-message';
+            gameControls.innerHTML = '';
+            turnIndicator.textContent = 'Waiting for game to start...';
         }
         
         // Show screen
@@ -494,6 +546,7 @@
             
             if (screenName === 'game') {
                 setupCanvas();
+                setupGameControls();
                 startGame();
             }
         }
@@ -505,7 +558,7 @@
                 statusMessage.textContent = `Unassigned ${direction.toUpperCase()}`;
             } else {
                 gameState.selectedDirections[direction] = gameState.playerId;
-                statusMessage.textContent = `Assigned ${direction.toUpperCase()} to Player ${gameState.playerId}`;
+                statusMessage.textContent = `Assigned ${direction.toUpperCase()} to yourself`;
             }
             
             const card = document.querySelector(`.control-card[data-direction="${direction}"]`);
@@ -532,10 +585,12 @@
         
         // Update player indicators
         function updatePlayerIndicators() {
+            // Reset all indicators
             playerIndicators.forEach(indicator => {
                 indicator.textContent = `${indicator.textContent.split(':')[0]}: Not Assigned`;
             });
             
+            // Group directions by player
             const playerDirections = {};
             for (const [direction, playerId] of Object.entries(gameState.selectedDirections)) {
                 if (!playerDirections[playerId]) {
@@ -544,9 +599,96 @@
                 playerDirections[playerId].push(direction.toUpperCase());
             }
             
+            // Update indicators for first 4 players
+            let playerIndex = 0;
             for (const [playerId, directions] of Object.entries(playerDirections)) {
-                const indicator = playerIndicators[playerId - 1];
-                indicator.textContent = `Player ${playerId}: ${directions.join(', ')}`;
+                if (playerIndex < 4) {
+                    const indicator = playerIndicators[playerIndex];
+                    indicator.textContent = `Player ${playerIndex + 1}: ${directions.join(', ')}`;
+                    playerIndex++;
+                }
+            }
+        }
+        
+        // Set up canvas
+        function setupCanvas() {
+            const container = canvas.parentElement;
+            const displayWidth = container.clientWidth;
+            const displayHeight = container.clientHeight;
+            
+            canvas.width = displayWidth * window.devicePixelRatio;
+            canvas.height = displayHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        
+        // Set up game controls based on assigned directions
+        function setupGameControls() {
+            gameControls.innerHTML = '';
+            
+            // Determine which directions this player controls
+            gameState.myAssignedDirections = [];
+            for (const [direction, playerId] of Object.entries(gameState.selectedDirections)) {
+                if (playerId === gameState.playerId) {
+                    gameState.myAssignedDirections.push(direction);
+                }
+            }
+            
+            // Create buttons for assigned directions
+            const directions = ['up', 'down', 'left', 'right'];
+            directions.forEach(dir => {
+                if (gameState.myAssignedDirections.includes(dir)) {
+                    const btn = document.createElement('div');
+                    btn.className = `direction-btn ${dir}`;
+                    btn.innerHTML = '↑';
+                    btn.dataset.direction = dir;
+                    btn.addEventListener('click', () => handleDirectionInput(dir));
+                    gameControls.appendChild(btn);
+                }
+            });
+            
+            if (gameState.myAssignedDirections.length === 0) {
+                gameControls.innerHTML = '<div style="color: #ff4a4a; padding: 10px;">You are not controlling any directions!</div>';
+            }
+        }
+        
+        // Handle direction input
+        function handleDirectionInput(direction) {
+            // Only allow input during player's turn
+            if (gameState.currentTurn !== gameState.playerId) {
+                return;
+            }
+            
+            // Validate direction (prevent 180-degree turns)
+            if ((direction === 'up' && gameState.lastDirection === 'down') ||
+                (direction === 'down' && gameState.lastDirection === 'up') ||
+                (direction === 'left' && gameState.lastDirection === 'right') ||
+                (direction === 'right' && gameState.lastDirection === 'left')) {
+                return;
+            }
+            
+            // Set the direction
+            gameState.direction = direction;
+            gameState.lastDirection = direction;
+            
+            // Move to next player's turn
+            const playerIds = Object.values(gameState.selectedDirections);
+            const uniquePlayerIds = [...new Set(playerIds)];
+            const currentIndex = uniquePlayerIds.indexOf(gameState.playerId);
+            const nextIndex = (currentIndex + 1) % uniquePlayerIds.length;
+            gameState.currentTurn = uniquePlayerIds[nextIndex];
+            
+            // Update turn indicator
+            updateTurnIndicator();
+        }
+        
+        // Update turn indicator
+        function updateTurnIndicator() {
+            if (gameState.currentTurn === gameState.playerId) {
+                turnIndicator.textContent = 'Your turn! Tap a direction button.';
+                turnIndicator.style.background = 'rgba(74, 255, 74, 0.3)';
+            } else {
+                turnIndicator.textContent = 'Waiting for other players...';
+                turnIndicator.style.background = 'rgba(255, 255, 74, 0.2)';
             }
         }
         
@@ -616,6 +758,10 @@
         
         buttons.start.addEventListener('click', () => {
             if (Object.keys(gameState.selectedDirections).length === 4) {
+                // Set up player order
+                const playerIds = Object.values(gameState.selectedDirections);
+                gameState.playerOrder = [...new Set(playerIds)];
+                gameState.currentTurn = gameState.playerOrder[0];
                 showScreen('game');
             }
         });
@@ -780,7 +926,8 @@
                 gameState.snake.pop();
             }
             
-            gameState.lastDirection = gameState.direction;
+            // Update turn indicator
+            updateTurnIndicator();
         }
         
         function drawGame() {
@@ -816,7 +963,6 @@
         }
         
         function startGame() {
-            // Set canvas size based on actual display
             const container = canvas.parentElement;
             gameState.canvasSize.width = container.clientWidth;
             gameState.canvasSize.height = container.clientHeight;
@@ -826,6 +972,8 @@
             gameState.gameRunning = true;
             playerCountElement.textContent = '4';
             setupCanvas();
+            setupGameControls();
+            updateTurnIndicator();
             gameLoop();
         }
         
@@ -839,66 +987,6 @@
                 }
             }, 100);
         }
-        
-        // Touch controls for mobile
-        let touchStartX = 0;
-        let touchStartY = 0;
-        
-        canvas.addEventListener('touchstart', (e) => {
-            if (gameState.screen !== 'game') return;
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-            e.preventDefault();
-        }, { passive: false });
-        
-        canvas.addEventListener('touchmove', (e) => {
-            if (gameState.screen !== 'game') return;
-            e.preventDefault();
-        }, { passive: false });
-        
-        canvas.addEventListener('touchend', (e) => {
-            if (gameState.screen !== 'game') return;
-            
-            const touchEndX = e.changedTouches[0].clientX;
-            const touchEndY = e.changedTouches[0].clientY;
-            
-            const dx = touchEndX - touchStartX;
-            const dy = touchEndY - touchStartY;
-            
-            // Determine swipe direction
-            if (Math.abs(dx) > Math.abs(dy)) {
-                // Horizontal swipe
-                if (dx > 20 && gameState.lastDirection !== 'left') {
-                    gameState.direction = 'right';
-                } else if (dx < -20 && gameState.lastDirection !== 'right') {
-                    gameState.direction = 'left';
-                }
-            } else {
-                // Vertical swipe
-                if (dy > 20 && gameState.lastDirection !== 'up') {
-                    gameState.direction = 'down';
-                } else if (dy < -20 && gameState.lastDirection !== 'down') {
-                    gameState.direction = 'up';
-                }
-            }
-            
-            e.preventDefault();
-        }, { passive: false });
-        
-        // Keyboard controls (for desktop testing)
-        document.addEventListener('keydown', (e) => {
-            if (gameState.screen !== 'game') return;
-            
-            if (e.key === 'ArrowUp' && gameState.lastDirection !== 'down') {
-                gameState.direction = 'up';
-            } else if (e.key === 'ArrowDown' && gameState.lastDirection !== 'up') {
-                gameState.direction = 'down';
-            } else if (e.key === 'ArrowLeft' && gameState.lastDirection !== 'right') {
-                gameState.direction = 'left';
-            } else if (e.key === 'ArrowRight' && gameState.lastDirection !== 'left') {
-                gameState.direction = 'right';
-            }
-        });
     </script>
 </body>
 </html>
